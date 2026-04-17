@@ -1,40 +1,71 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
-  Alert,
   SafeAreaView,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   FlatList,
-  TextInput,
+  ActivityIndicator,
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 
-const initialHistory = [
-  {
-    id: "1",
-    course: "Mobile Programming",
-    date: "2026-03-01",
-    status: "Present",
-    room: "Lab 1",
-    lecturer: "Pak Budi",
-  },
-  { id: "2", course: "Database System", date: "2026-03-02", status: "Present", room: "Lab 2", lecturer: "Pak Andi" },
-  { id: "3", course: "Operating System", date: "2026-03-03", status: "Absent", room: "Lab 3", lecturer: "Pak Affan" },
-  {
-    id: "4",
-    course: "Computer Network",
-    date: "2026-03-04",
-    status: "Present",
-    room: "Lab 4",
-    lecturer: "Pak Ego",
-  },
-];
-
 export default function HistoryScreen({ navigation }) {
-  const [historyData] = useState(initialHistory);
+  const [historyData, setHistoryData] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // 1. FUNGSI AMBIL DATA (Simulasi API)
+  const fetchAttendanceData = (isInitial = false) => {
+    if (!isInitial && isLoading) return; // Mencegah pemanggilan ganda jika sedang load progress
+
+    if (isInitial) {
+      if (!isRefreshing) setIsLoading(true);
+    } else {
+      setIsLoading(true);
+    }
+
+    // Simulasi delay jaringan selama 1.5 detik
+    setTimeout(() => {
+      const newItems = [];
+      const startIdx = isInitial ? 0 : historyData.length;
+
+      for (let i = 1; i <= 10; i++) {
+        newItems.push({
+          id: (startIdx + i).toString(),
+          course: `Mata Kuliah #${startIdx + i}`,
+          date: "2026-04-14",
+          status: (startIdx + i) % 3 === 0 ? "Absent" : "Present",
+          room: "Lab 3",
+          lecturer: "Dosen Pengampu",
+        });
+      }
+
+      // Jika initial (halaman 1), ganti data. Jika tidak, gabungkan (append).
+      setHistoryData(isInitial ? newItems : [...historyData, ...newItems]);
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }, 1500);
+  };
+
+  // Panggil saat layar pertama kali dibuka
+  useEffect(() => {
+    fetchAttendanceData(true);
+  }, []);
+
+  // 2. FUNGSI REFRESH (Tarik dari Atas)
+  const onRefresh = () => {
+    setIsRefreshing(true);
+    fetchAttendanceData(true); // Reset ke data paling awal
+  };
+
+  // 3. FUNGSI LOAD MORE (Tarik dari Bawah)
+  const handleLoadMore = () => {
+    // Hanya muat data baru jika data sekarang sudah cukup banyak dan tidak sedang loading
+    if (historyData.length >= 10 && !isLoading) {
+      fetchAttendanceData(false);
+    }
+  };
 
   const renderItem = ({ item }) => (
     <TouchableOpacity
@@ -51,6 +82,17 @@ export default function HistoryScreen({ navigation }) {
     </TouchableOpacity>
   );
 
+  // Indikator Loading di bagian bawah list
+  const renderFooter = () => {
+    if (!isLoading || isRefreshing) return null;
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color="#0056a0" />
+        <Text style={styles.loaderText}>Memuat riwayat lama...</Text>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
@@ -58,56 +100,70 @@ export default function HistoryScreen({ navigation }) {
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         contentContainerStyle={styles.content}
+        refreshing={isRefreshing}
+        onRefresh={onRefresh}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={renderFooter}
+        ListEmptyComponent={
+          !isLoading && <Text style={styles.emptyText}>Tidak ada riwayat.</Text>
+        }
       />
     </SafeAreaView>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
+  container: { 
+    flex: 1, 
+    backgroundColor: "#F5F5F5" 
   },
-
-  content: {
-    padding: 20,
+  content: { 
+    padding: 20 
   },
-
-  item: {
-    flexDirection: "row",
-    alignItems: "center",
+  item: { 
+    flexDirection: "row", 
+    alignItems: "center", 
     backgroundColor: "white",
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 10,
-    elevation: 2,
-
+    padding: 15, 
+    borderRadius: 8, 
+    marginBottom: 10, 
+    elevation: 2 
   },
-
-
-  course: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
+  course: { 
+    fontSize: 16, 
+    fontWeight: "bold", 
+    color: "#333" 
   },
-
-  date: {
-    fontSize: 12,
-    color: "gray",
-    marginTop: 4,
+  date: { 
+    fontSize: 12, 
+    color: "gray", 
+    marginTop: 4 
   },
-
-  present: {
-    color: "green",
-    fontWeight: "bold",
+  present: { 
+    color: "green", 
+    fontWeight: "bold", 
+    marginRight: 5 
   },
-
-  absent: {
-    color: "red",
-    fontWeight: "bold",
+  absent: { 
+    color: "red", 
+    fontWeight: "bold", 
+    marginRight: 5 
   },
-
-
+  footerLoader: { 
+    paddingVertical: 20, 
+    alignItems: 'center', 
+    flexDirection: 'row', 
+    justifyContent: 'center' 
+  },
+  loaderText: { 
+    marginLeft: 10, 
+    color: '#666', 
+    fontSize: 12 
+  },
+  emptyText: { 
+    textAlign: 'center', 
+    marginTop: 50, 
+    color: '#999' 
+  }
 });
-
-
