@@ -1,94 +1,102 @@
-import { useState, useEffect } from "react";
+import React, { useState, useCallback, useContext } from "react";
 import {
-  View,
-  Text,
-  SafeAreaView,
-  StyleSheet,
-  TouchableOpacity,
-  FlatList,
-  ActivityIndicator,
-} from "react-native";
-import { MaterialIcons } from "@expo/vector-icons";
+  View, Text, SafeAreaView, StyleSheet, FlatList,
+  TouchableOpacity, ActivityIndicator, Alert
+} from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import { AuthContext } from '../context/AuthContext';
 
 export default function HistoryScreen({ navigation }) {
+  const { userData } = useContext(AuthContext);
+
   const [historyData, setHistoryData] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // 1. FUNGSI AMBIL DATA (Simulasi API)
-  const fetchAttendanceData = (isInitial = false) => {
-    if (!isInitial && isLoading) return; // Mencegah pemanggilan ganda jika sedang load progress
+  // Pagination State 
+  const [page, setPage] = useState(0);
+  const [isLastPage, setIsLastPage] = useState(false);
 
-    if (isInitial) {
-      if (!isRefreshing) setIsLoading(true);
-    } else {
-      setIsLoading(true);
-    }
+  const BASE_URL = "http://10.1.14.166:8080/api/presensi";
 
-    // Simulasi delay jaringan selama 1.5 detik
-    setTimeout(() => {
-      const newItems = [];
-      const startIdx = isInitial ? 0 : historyData.length;
+  // FUNGSI GET API DENGAN PAGINATION
+  const fetchAttendanceData = async (targetPage = 0) => {
+    if (isLoading || (isLastPage && targetPage !== 0)) return;
 
-      for (let i = 1; i <= 10; i++) {
-        newItems.push({
-          id: (startIdx + i).toString(),
-          course: `Mata Kuliah #${startIdx + i}`,
-          date: "2026-04-14",
-          status: (startIdx + i) % 3 === 0 ? "Absent" : "Present",
-          room: "Lab 3",
-          lecturer: "Dosen Pengampu",
-        });
+    setIsLoading(true);
+
+    try {
+      // Memanggil API Spring Boot
+      const response = await fetch(`${BASE_URL}/history/${userData.nim_mhs}?page=${targetPage}&size=10`);
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
       }
 
-      // Jika initial (halaman 1), ganti data. Jika tidak, gabungkan (append).
-      setHistoryData(isInitial ? newItems : [...historyData, ...newItems]);
+      const json = await response.json();
+
+      // Spring Boot Pageable menyimpan array di dalam properti 'content'
+      const newItems = json.content || [];
+
+      if (targetPage === 0) {
+        setHistoryData(newItems); // Refresh halaman awal
+      } else {
+        setHistoryData(prev => [...prev, ...newItems]); // Append (Load More)
+      }
+
+      setPage(targetPage);
+      setIsLastPage(json.last); // 'last' adalah boolean dari Spring Boot
+
+    } catch (error) {
+      console.error("Gagal tarik data:", error);
+      Alert.alert("Error Jaringan", "Gagal mengambil data. Pastikan IP backend " + BASE_URL + " sudah benar.");
+    } finally {
       setIsLoading(false);
       setIsRefreshing(false);
-    }, 1500);
+    }
   };
 
-  // Panggil saat layar pertama kali dibuka
-  useEffect(() => {
-    fetchAttendanceData(true);
-  }, []);
+  // Otomatis refresh saat layar dibuka
+  useFocusEffect(
+    useCallback(() => {
+      fetchAttendanceData(0);
+    }, [])
+  );
 
-  // 2. FUNGSI REFRESH (Tarik dari Atas)
   const onRefresh = () => {
     setIsRefreshing(true);
-    fetchAttendanceData(true); // Reset ke data paling awal
+    fetchAttendanceData(0);
   };
 
-  // 3. FUNGSI LOAD MORE (Tarik dari Bawah)
   const handleLoadMore = () => {
-    // Hanya muat data baru jika data sekarang sudah cukup banyak dan tidak sedang loading
-    if (historyData.length >= 10 && !isLoading) {
-      fetchAttendanceData(false);
+    if (!isLastPage && !isLoading) {
+      fetchAttendanceData(page + 1);
     }
   };
 
   const renderItem = ({ item }) => (
     <TouchableOpacity
       style={styles.item}
-      onPress={() => navigation.navigate("Detail", { dataPresensi: item })}>
+      onPress={() => navigation.navigate("Detail", { dataPresensi: item })}
+    >
       <View style={{ flex: 1 }}>
         <Text style={styles.course}>{item.course}</Text>
-        <Text style={styles.date}>{item.date}</Text>
+        <Text style={styles.date}>{item.date} | {item.jamPresensi}</Text>
       </View>
       <Text style={item.status === "Present" ? styles.present : styles.absent}>
         {item.status}
       </Text>
-      <MaterialIcons name="chevron-right" size={24} color="#555" style={{ marginLeft: 10 }} />
+      <MaterialIcons name="chevron-right" size={24} color="#999" style={{ marginLeft: 10 }} />
     </TouchableOpacity>
   );
 
-  // Indikator Loading di bagian bawah list
   const renderFooter = () => {
-    if (!isLoading || isRefreshing) return null;
+    if (!isLoading) return null;
     return (
       <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color="#0056a0" />
-        <Text style={styles.loaderText}>Memuat riwayat lama...</Text>
+        <ActivityIndicator size="small" color="#0056A0" />
+        <Text style={styles.loaderText}>Menarik data dari server ...</Text>
       </View>
     );
   };
@@ -97,7 +105,7 @@ export default function HistoryScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <FlatList
         data={historyData}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
         renderItem={renderItem}
         contentContainerStyle={styles.content}
         refreshing={isRefreshing}
@@ -106,7 +114,7 @@ export default function HistoryScreen({ navigation }) {
         onEndReachedThreshold={0.5}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={
-          !isLoading && <Text style={styles.emptyText}>Tidak ada riwayat.</Text>
+          !isLoading && <Text style={styles.emptyText}>Tidak ada riwayat absensi.</Text>
         }
       />
     </SafeAreaView>
@@ -114,56 +122,56 @@ export default function HistoryScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#F5F5F5" 
+  container: {
+    flex: 1,
+    backgroundColor: "#F5F5F5"
   },
-  content: { 
-    padding: 20 
+  content: {
+    padding: 20
   },
-  item: { 
-    flexDirection: "row", 
-    alignItems: "center", 
+  item: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "white",
-    padding: 15, 
-    borderRadius: 8, 
-    marginBottom: 10, 
-    elevation: 2 
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+    elevation: 2
   },
-  course: { 
-    fontSize: 16, 
-    fontWeight: "bold", 
-    color: "#333" 
+  course: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333"
   },
-  date: { 
-    fontSize: 12, 
-    color: "gray", 
-    marginTop: 4 
+  date: {
+    fontSize: 12,
+    color: "gray",
+    marginTop: 4
   },
-  present: { 
-    color: "green", 
-    fontWeight: "bold", 
-    marginRight: 5 
+  present: {
+    color: "green",
+    fontWeight: "bold",
+    marginRight: 5
   },
-  absent: { 
-    color: "red", 
-    fontWeight: "bold", 
-    marginRight: 5 
+  absent: {
+    color: "red",
+    fontWeight: "bold",
+    marginRight: 5
   },
-  footerLoader: { 
-    paddingVertical: 20, 
-    alignItems: 'center', 
-    flexDirection: 'row', 
-    justifyContent: 'center' 
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center'
   },
-  loaderText: { 
-    marginLeft: 10, 
-    color: '#666', 
-    fontSize: 12 
+  loaderText: {
+    marginLeft: 10,
+    color: '#666',
+    fontSize: 12
   },
-  emptyText: { 
-    textAlign: 'center', 
-    marginTop: 50, 
-    color: '#999' 
+  emptyText: {
+    textAlign: 'center',
+    marginTop: 50,
+    color: '#999'
   }
 });

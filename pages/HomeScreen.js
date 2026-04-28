@@ -1,66 +1,111 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useContext, useCallback } from "react";
+import { useFocusEffect } from '@react-navigation/native';
 import {
-  View,
-  Text,
-  Alert,
-  SafeAreaView,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  FlatList,
-  TextInput,
-} from "react-native";
-import { MaterialIcons } from "@expo/vector-icons";
+  View, Text, SafeAreaView, StyleSheet,
+  TouchableOpacity, ScrollView, Alert, TextInput, ActivityIndicator
+} from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { AuthContext } from '../context/AuthContext';
 
+const HomeScreen = ({ navigation }) => {
 
-const history = [
-  {
-    id: "1",
-    course: "Mobile Programming",
-    date: "2026-03-01",
-    status: "Present",
-  },
-  { id: "2", course: "Database System", date: "2026-03-02", status: "Present" },
-  { id: "3", course: "Operating System", date: "2026-03-03", status: "Absent" },
-  {
-    id: "4",
-    course: "Computer Network",
-    date: "2026-03-04",
-    status: "Present",
-  },
-];
-
-const HomeScreen = () => {
-  const [historyData, setHistoryData] = useState(history);
+  // Ambil data user dari Context
+  const { userData } = useContext(AuthContext);
   const [isCheckedIn, setIsCheckedIn] = useState(false);
-  const [currentTime, setCurrentTime] = useState("Memuat jam...");
-  const [note, setNote] = useState("");
-  const noteinputRef = useRef(null);
-  const AttendanceStats = useMemo(() => {
+  const [currentTime, setCurrentTime] = useState('Memuat jam ...');
+  const [note, setNote] = useState('');
+  const [isPosting, setIsPosting] = useState(false);
+  const noteInputRef = useRef(null);
 
-    console.log("Menghitung Statistik Kehadiran...");
-    const presentCount = historyData.filter(item => item.status === "Present").length;
-    const absentCount = historyData.filter(item => item.status === "Absent").length;
-    return { totalpresent: presentCount, totalAbsent: absentCount };
+  const BASE_URL = "http://10.1.14.166:8080/api/presensi";
 
-  }, [historyData]);
+  const [attendanceStats, setAttendanceStats] = useState({ totalPresent: 0, totalAbsent: 0 });
+
+  // Fungsi untuk mengambil statistik dari backend
+  const fetchStats = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/summary/${userData.nim_mhs}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAttendanceStats(data);
+      }
+    } catch (error) {
+      console.error("Gagal ambil statistik:", error);
+    }
+  };
+
+  // Ambil statistik setiap kali layar difokuskan
+  useFocusEffect(
+    useCallback(() => {
+      fetchStats();
+    }, [])
+  );
+
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentTime(new Date().toLocaleTimeString("id-ID"));
+      setCurrentTime(new Date().toLocaleTimeString('id-ID', { hour12: false }));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
 
-  const handleCheckin = () => {
-    if (isCheckedIn) return Alert.alert("Perhatian", "Anda sudah melakukan Check in untuk kelas ini");
-    if (note.trim() === "") {
-      Alert.alert("Perhatian", "Harap Masukan Catatan");
-      noteinputRef.current.focus();
+  const handleCheckIn = async () => {
+    if (isCheckedIn) return Alert.alert("Perhatian", "Anda sudah Check In.");
+    if (note.trim() === '') {
+      Alert.alert("Peringatan", "Catatan kehadiran wajib diisi!");
+      noteInputRef.current.focus();
       return;
     }
-    setIsCheckedIn(true);
-    Alert.alert("Berhasil", `Check in berhasil pada pukul ${currentTime}`);
+
+    setIsPosting(true);
+    const now = new Date();
+
+    const payload = {
+      kodeMk: "TRPL205",
+      course: "Mobile Programming",
+      status: "Present",
+      nimMhs: userData.nim_mhs,
+      pertemuanKe: 5,
+      date: now.toISOString().split('T')[0],
+      jamPresensi: now.toLocaleTimeString('id-ID', { hour12: false }),
+      kode_qr: "AUTH-TRPL205-W5-XYZ987",
+      ruangan: "Lab Komputer 3",
+      dosenPengampu: "Tim Dosen TRPL"
+    };
+
+    try {
+      const response = await fetch(BASE_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setIsCheckedIn(true);
+        // Tambahkan nilai total present secara lokal
+        setAttendanceStats(prev => ({
+          ...prev,
+          totalPresent: prev.totalPresent + 1
+        }));
+
+        Alert.alert("Berhasil!", "Presensi masuk ke Database Java Spring.", [
+          { text: "Lihat Riwayat", onPress: () => navigation.navigate('HistoryTab') }
+        ]);
+      } else {
+        Alert.alert("Gagal", result.message || "Terjadi kesalahan di server.");
+      }
+    } catch (error) {
+      Alert.alert("Error Jaringan", "Pastikan IP Laptop benar and Spring Boot berjalan.");
+      console.error(error);
+    } finally {
+      setIsPosting(false);
+    }
   };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -69,50 +114,58 @@ const HomeScreen = () => {
           <Text style={styles.clockText}>{currentTime}</Text>
         </View>
 
+        {/* Student Card */}
         <View style={styles.card}>
           <View style={styles.icon}>
             <MaterialIcons name="person" size={40} color="#555" />
           </View>
-
           <View>
-            <Text style={styles.name}>Khoirul Surya Danda</Text>
-            <Text>NIM : 0920240009</Text>
-            <Text>Class : TRPL 2B</Text>
+            <Text style={styles.name}>{userData.nama}</Text>
+            <Text>NIM : {userData.nim_mhs}</Text>
+            <Text>Class : Informatika-2B</Text>
           </View>
         </View>
 
+        {/* Today's Class */}
         <View style={styles.classCard}>
           <Text style={styles.subtitle}>Today's Class</Text>
-
-          <Text>Mobile Programming</Text>
+          <Text>Mobile Programming (TRPL205)</Text>
           <Text>08:00 - 10:00</Text>
           <Text>Lab 3</Text>
+
           {!isCheckedIn && (
             <TextInput
-              ref={noteinputRef}
+              ref={noteInputRef}
               style={styles.inputCatatan}
-              placeholder="Tambahkan Catatan (Opsional)"
+              placeholder="Tulis catatan (cth: Hadir lab)"
               value={note}
               onChangeText={setNote}
             />
           )}
-          <TouchableOpacity
-            style={[styles.button, isCheckedIn ? styles.buttonDisabled : styles.buttonActive,]}
-            onPress={handleCheckin}
-            disabled={isCheckedIn}
-          >
-            <Text style={styles.buttonText}>
-              {isCheckedIn ? "Checked In" : "Check In"}
-            </Text>
-          </TouchableOpacity>
+
+          {isPosting ? (
+            <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 15 }} />
+          ) : (
+            <TouchableOpacity
+              style={[styles.button, isCheckedIn ? styles.buttonDisabled : styles.buttonActive]}
+              onPress={handleCheckIn}
+              disabled={isCheckedIn}
+            >
+              <Text style={styles.buttonText}>
+                {isCheckedIn ? "CHECKED IN" : "CHECK IN SEKARANG"}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
+
+        {/* Stats Card */}
         <View style={styles.statsCard}>
           <View style={styles.statBox}>
-            <Text style={styles.statNumber}>{AttendanceStats.totalpresent}</Text>
+            <Text style={styles.statNumber}>{attendanceStats.totalPresent}</Text>
             <Text style={styles.statLabel}>Total Present</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={[styles.statNumber, { color: "red" }]}>{AttendanceStats.totalAbsent}</Text>
+            <Text style={[styles.statNumber, { color: 'red' }]}>{attendanceStats.totalAbsent}</Text>
             <Text style={styles.statLabel}>Total Absent</Text>
           </View>
         </View>
@@ -120,6 +173,8 @@ const HomeScreen = () => {
     </SafeAreaView>
   );
 };
+
+
 export default HomeScreen;
 
 const styles = StyleSheet.create({

@@ -21,7 +21,7 @@ export default function DetailScreen({ navigation, route }) {
       <View style={styles.card}>
         <Text style={styles.course}>{dataPresensi.course}</Text>
         <View style={styles.divider} />
-        
+
         <View style={styles.row}>
           <Text style={styles.label}>Tanggal:</Text>
           <Text style={styles.value}>{dataPresensi.date}</Text>
@@ -36,12 +36,12 @@ export default function DetailScreen({ navigation, route }) {
 
         <View style={styles.row}>
           <Text style={styles.label}>Ruangan:</Text>
-          <Text style={styles.value}>{dataPresensi.room || "-"}</Text>
+          <Text style={styles.value}>{dataPresensi.ruangan || "-"}</Text>
         </View>
 
         <View style={styles.row}>
           <Text style={styles.label}>Dosen Pengampu:</Text>
-          <Text style={styles.value}>{dataPresensi.lecturer || "-"}</Text>
+          <Text style={styles.value}>{dataPresensi.dosenPengampu || "-"}</Text>
         </View>
       </View>
     </SafeAreaView>
