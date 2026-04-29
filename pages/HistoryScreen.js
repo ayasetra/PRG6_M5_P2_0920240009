@@ -81,7 +81,7 @@ export default function HistoryScreen({ navigation }) {
       onPress={() => navigation.navigate("Detail", { dataPresensi: item })}
     >
       <View style={{ flex: 1 }}>
-        <Text style={styles.course}>{item.course}</Text>
+        <Text style={styles.course}>{item.kodeMk}</Text>
         <Text style={styles.date}>{item.date} | {item.jamPresensi}</Text>
       </View>
       <Text style={item.status === "Present" ? styles.present : styles.absent}>

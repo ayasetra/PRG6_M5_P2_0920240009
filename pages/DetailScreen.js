@@ -19,7 +19,7 @@ export default function DetailScreen({ navigation, route }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.card}>
-        <Text style={styles.course}>{dataPresensi.course}</Text>
+        <Text style={styles.course}>{dataPresensi.kodeMk}</Text>
         <View style={styles.divider} />
 
         <View style={styles.row}>
